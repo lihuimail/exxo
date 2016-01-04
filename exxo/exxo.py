@@ -3,16 +3,11 @@ import sys
 import argparse
 import subprocess
 import zipapp
+import zipfile
 import shutil
 from pathlib import Path
-from .bootstrap import PYTHON_VERSION_MAP, download_and_unpack
-from .venv import ACTIVATE_SCRIPT
-
-
-SETUPTOOLS_VERSION = '19.1.1'
-PIP_VERSION = '7.1.2'
-SETUPTOOLS_URL = 'https://pypi.python.org/packages/source/s/setuptools/setuptools-{}.tar.gz'.format(SETUPTOOLS_VERSION)
-PIP_URL = 'https://pypi.python.org/packages/source/p/pip/pip-{}.tar.gz'.format(PIP_VERSION)
+from .bootstrap import PYTHON_VERSION_MAP
+from .venv import ACTIVATE_SCRIPT, PIP_SCRIPT
 
 
 def create_binary(dst_path, pyrun, zip_file):
@@ -31,7 +26,8 @@ def create_virtualenv(args):
     envdir = Path(args.envdir)
     bindir = envdir / 'bin'
     libdir = envdir / 'lib' / 'python{}'.format(args.py_version) / 'site-packages'
-    for d in (bindir, libdir):
+    pipdir = envdir / 'pip'
+    for d in (bindir, libdir, pipdir):
         d.mkdir(parents=True, exist_ok=True)
     # setup bin dir
     shutil.copy(str(pyrun), str(bindir))
@@ -45,18 +41,15 @@ def create_virtualenv(args):
         fp.write(activate_buf)
     # setup include dir
     shutil.copytree(str(targetdir / 'include'), str(envdir / 'include'))
-    # install setuptools & pip now
-    venv_pyrun = (bindir / pyrun.name).resolve()
-    # install setuptools
-    download_and_unpack(SETUPTOOLS_URL, builddir / 'setuptools.tar.gz', builddir)
-    setup_py = builddir / 'setuptools-{}'.format(SETUPTOOLS_VERSION) / 'setup.py'
-    # TODO: for now use --root=/ for now to prevent installing as egg
-    subprocess.check_call([str(venv_pyrun), str(setup_py), 'install', '--root=/'])
-    # install pip
-    download_and_unpack(PIP_URL, builddir / 'pip.tar.gz', builddir)
-    pip_src_dir = builddir / 'pip-{}'.format(PIP_VERSION)
-    setup_py = (pip_src_dir / 'setup.py').resolve()
-    subprocess.check_call([str(venv_pyrun), str(setup_py), 'install'], cwd=str(pip_src_dir))
+    # install setuptools & pip
+    zf = zipfile.ZipFile(str(targetdir / 'setuptools.egg'))
+    zf.extractall(str(pipdir))
+    zf2 = zipfile.ZipFile(str(targetdir / 'pip.egg'))
+    zf2.extractall(str(pipdir))
+    pip_bin = bindir / 'pip'
+    with (pip_bin).open('w') as fp:
+        fp.write(PIP_SCRIPT)
+    pip_bin.chmod(0o755)
 
 
 def build(args):
@@ -72,7 +65,7 @@ def build(args):
     zip_file = envdir / 'app.zip'
     # make sure pip undestands it as a local directory
     source_path = args.source_path.rstrip(os.sep) + os.sep
-    subprocess.check_call(['pip', 'install', source_path])
+    subprocess.check_call(['pip', 'install', '-U', source_path])
     # TODO: how not to bundle setuptools and pip?
     zipapp.create_archive(site_packages, zip_file, main=args.main)
     create_binary(Path(args.dest_bin), pyrun, zip_file)

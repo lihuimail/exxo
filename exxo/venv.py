@@ -15,6 +15,12 @@ deactivate () {
         hash -r
     fi
 
+    if [ -n "$_OLD_PYTHONPATH" ] ; then
+        PYTHONPATH="$_OLD_PYTHONPATH"
+        export PYTHONPATH
+        unset _OLD_PYTHONPATH
+    fi
+
     if [ -n "$_OLD_VIRTUAL_PS1" ] ; then
         PS1="$_OLD_VIRTUAL_PS1"
         export PS1
@@ -36,6 +42,10 @@ export VIRTUAL_ENV
 
 VIRTUAL_ENV_PYRUN_VERSION="__VENV_PYRUN_VERSION__"
 export VIRTUAL_ENV_PYRUN_VERSION
+
+_OLD_PYTHONPATH="$PYTHONPATH"
+PYTHONPATH="$VIRTUAL_ENV/pip:$PYTHONPATH"
+export PYTHONPATH
 
 _OLD_VIRTUAL_PATH="$PATH"
 PATH="$VIRTUAL_ENV/bin:$PATH"
@@ -63,4 +73,8 @@ fi
 if [ -n "$BASH" -o -n "$ZSH_VERSION" ] ; then
     hash -r
 fi
+"""
+
+PIP_SCRIPT = """#!/bin/bash -ue
+exec python -m pip $@
 """
